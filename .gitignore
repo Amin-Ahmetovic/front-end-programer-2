@@ -1,0 +1,43 @@
+# Ignore build artifacts and temporary files
+bin/
+obj/
+*.exe
+*.dll
+*.pdb
+*.cache
+*.log
+
+# Ignore EF Core Migrations history and user secrets
+Migrations/
+secrets.json
+
+# Ignore .NET configuration and lock files
+*.vs/
+.vscode/
+*.user
+*.suo
+*.psess
+*.pidb
+*.rsuser
+*.sln.docstates
+project.lock.json
+
+# Ignore system-specific files
+.DS_Store
+Thumbs.db
+
+# Ignore compiled TypeScript and static assets (if applicable)
+node_modules/
+dist/
+staticwebassets/
+
+# Ignore NuGet package cache
+packages/
+.nuget/
+
+# Ignore backup files
+*.bak
+*.old
+
+# Keep the database backup file
+!backup.sql

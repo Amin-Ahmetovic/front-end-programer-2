@@ -1,0 +1,334 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+    <script src="https://unpkg.com/babel-standalone@6.26.0/babel.min.js"></script>
+    <title>Sistem za upravljanje zaloge</title>
+    <style>
+        td, th {
+            padding: 10px;
+            text-align: center;
+        }
+
+        table, tr, td {
+            border: solid 2px black;
+            border-collapse: collapse;
+        }
+
+        table {
+            margin: auto;
+        }
+
+        th {
+            cursor: pointer;
+        }
+
+        th:hover {
+            background-color: #ddd;
+        }
+
+        form {
+            margin-bottom: 0.3vh;
+        }
+    </style>
+</head>
+
+<body>
+    <div id="root"></div>
+
+    <script type="text/babel">
+
+        function Form({ headers, view, onAdd }) {
+            const [formData, setFormData] = React.useState(() =>
+                headers.reduce((acc, header) => ({ ...acc, [header]: "" }), {})
+            );
+
+            const [isSubmitting, setIsSubmitting] = React.useState(false);
+
+            const handleChange = (e, header) => {
+                setFormData({ ...formData, [header]: e.target.value });
+            };
+
+            const handleSubmit = async (e) => {
+                e.preventDefault();
+                if (isSubmitting) return;
+                setIsSubmitting(true);
+                        
+                console.log("Raw formData:", formData);
+                        
+                let requestBody;
+                        
+                if (view === "skladisce-has-izdelek") {
+                    
+                    requestBody = {
+                        IDSk: Number(formData.idSk) || 0,
+                        IDIz: Number(formData.idIz) || 0,
+                        Zaloga: Number(formData.zaloga) || 0
+                    };
+                } else {
+                    requestBody = { ...formData };
+                    if ("id" in requestBody) requestBody.id = Number(requestBody.id) || 0;
+                }
+            
+                console.log("Submitting:", JSON.stringify(requestBody));
+            
+                if (!requestBody || Object.keys(requestBody).length === 0) {
+                    alert("Error: Form data is empty!");
+                    setIsSubmitting(false);
+                    return;
+                }
+            
+                try {
+                    const response = await fetch(`http://localhost:5041/${view}`, {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify(requestBody),
+                    });
+                
+                    if (response.status === 409) {
+                        alert("Ta izdelek že obstaja v skladišču!");
+                        return;
+                    }
+                
+                    if (!response.ok) {
+                        throw new Error("Napaka pri vnosu");
+                    }
+                
+                    const result = await response.json();
+                    alert("Vnos uspešno dodan");
+                    onAdd(result);
+                } catch (error) {
+                    alert("Error: " + error.message);
+                } finally {
+                    setIsSubmitting(false);
+                }
+            };
+
+
+
+
+
+            return (
+                <form onSubmit={handleSubmit}>
+                    {headers
+                        .filter(header => {
+                            if (view === "skladisce") return header.toLowerCase() !== "id";
+                            if (view === "izdelek") return header.toLowerCase() !== "id";
+                            if (view === "skladisce-has-izdelek") return !header.toLowerCase().includes("naziv"); 
+                            return true;
+                        })
+                        .map((header) => (
+                            <div key={header}>
+                                <label>{header}: </label>
+                                <input
+                                    type={header.toLowerCase().includes("naziv") ? "text" : "number"}
+                                    value={formData[header]}
+                                    onChange={(e) => handleChange(e, header)}
+                                    required
+                                />
+                            </div>
+                        ))
+                    }
+                    <button type="submit">Add</button>
+                </form>
+            );
+        }
+
+        function Table({ data, endpoint, onEdit, onDelete }) {
+            const [sortBy, setSortBy] = React.useState({ column: null, direction: 'asc' });
+
+            if (!data || data.length === 0) {
+                return <p>Podatki niso na voljo</p>;
+            }
+
+            const headers = Object.keys(data[0]);
+            const handleSort = (column) => {
+                let direction = 'asc';
+                if (sortBy.column === column && sortBy.direction === 'asc') {
+                    direction = 'desc';
+                }
+                setSortBy({ column, direction });
+            };
+
+            const sortedData = [...data].sort((a, b) => {
+                if (sortBy.column === null) return 0;
+
+                const valueA = typeof a[sortBy.column] === 'string' ? a[sortBy.column].toLowerCase() : a[sortBy.column];
+                const valueB = typeof b[sortBy.column] === 'string' ? b[sortBy.column].toLowerCase() : b[sortBy.column];
+
+                if (valueA < valueB) {
+                    return sortBy.direction === 'asc' ? -1 : 1;
+                }
+                if (valueA > valueB) {
+                    return sortBy.direction === 'asc' ? 1 : -1;
+                }
+                return 0;
+            });
+
+            return (
+    <table>
+        <thead>
+            <tr>
+                {headers.map((header) => (
+                    <th key={header} onClick={() => handleSort(header)}>
+                        {header}
+                        {sortBy.column === header && (sortBy.direction === 'asc' ? ' ▲' : ' ▼')}
+                    </th>
+                ))}
+                {/* Only show the "Actions" column if it's not 'izdelek-brez-skladisca' */}
+                {endpoint !== "izdelek-brez-skladisca" && <th>Actions</th>}
+            </tr>
+        </thead>
+        <tbody>
+            {sortedData.map((row, rowIndex) => (
+                <tr key={rowIndex}>
+                    {headers.map((header) => (
+                        <td key={header}>{row[header]}</td>
+                    ))}
+                    {/* Only show the Edit/Delete buttons if it's not 'izdelek-brez-skladisca' */}
+                    {endpoint !== "izdelek-brez-skladisca" && (
+                        <td>
+                            <button onClick={() => onEdit(row, endpoint)}>Uredi</button>
+                            <button onClick={() => onDelete(row, endpoint)}>Izbriši</button>
+                        </td>
+                    )}
+                </tr>
+            ))}
+        </tbody>
+    </table>
+);
+
+        }
+
+        function App() {
+            const [data, setData] = React.useState([]);
+            const [view, setView] = React.useState("izdelek");
+            const [threshold, setThreshold] = React.useState(1);
+            const [isLowerThreshold, setIsLowerThreshold] = React.useState(true);
+
+            const fetchData = async (endpoint) => {
+                try {
+                    const response = await fetch(`http://localhost:5041/${endpoint}`);
+                    if (!response.ok) throw new Error(`Failed to fetch ${endpoint}`);
+                    const result = await response.json();
+                    setData(result);
+                } catch (error) {
+                    console.error("Error fetching data:", error);
+                }
+            };
+        
+            React.useEffect(() => {
+                fetchData(view);
+            }, [view]);
+        
+            const handleDelete = async (item, endpoint) => {
+                let url = `http://localhost:5041/${endpoint}`;
+                const id = item.id || item.idIz || item.idSk;
+            
+                if (endpoint === "skladisce-has-izdelek") {
+                    url += `/${item.idSk}/${item.idIz}`;
+                } else {
+                    url += `/${id}`;
+                }
+            
+                try {
+                    await fetch(url, { method: "DELETE" });
+                    fetchData(endpoint);
+                } catch (error) {
+                    console.error("Error deleting item:", error);
+                }
+            };
+        
+            const handleEdit = async (item, endpoint) => {
+                let url = `http://localhost:5041/${endpoint}`;
+                const updatedName = prompt("Vnesi novo vrednost:", item.naziv);
+            
+                if (!updatedName) return;
+            
+                if (endpoint === "skladisce-has-izdelek") {
+                    url += `/${item.idSk}/${item.idIz}/${updatedName}`;
+                } else {
+                    url += `/${item.id}`;
+                }
+            
+                try {
+                    await fetch(url, {
+                        method: "PUT",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ naziv: updatedName }),
+                    });
+                    fetchData(endpoint);
+                } catch (error) {
+                    console.error("Error updating item:", error);
+                }
+            };
+        
+            const handleAdd = (newItem) => {
+                fetchData(view);
+            };
+        
+            const headers = data.length > 0 ? Object.keys(data[0]) : [];
+        
+            const maxZaloga = view === "skladisce-has-izdelek"
+                ? Math.max(0, ...data.map(item => item.zaloga || 0))
+                : 100;
+        
+            React.useEffect(() => {
+                if (threshold > maxZaloga) setThreshold(maxZaloga);
+            }, [maxZaloga]);
+        
+            const filteredData = view === "skladisce-has-izdelek"
+                ? data.filter(item =>
+                    isLowerThreshold ? item.zaloga >= threshold : item.zaloga <= threshold
+                )
+                : data;
+        
+                const adjustThreshold = (change) => {
+                setThreshold(prev => Math.max(0, Math.min(maxZaloga, prev + change)));
+            };
+        
+            return (
+                <div>
+                    <button onClick={() => setView("izdelek")}>Izdelki</button>
+                    <button onClick={() => setView("skladisce")}>Skladišča</button>
+                    <button onClick={() => setView("skladisce-has-izdelek")}>Skladišče ima izdelke</button>
+                    <button onClick={() => setView("izdelek-brez-skladisca")}>Izdelki brez skladišča</button>
+
+                
+                    {view === "skladisce-has-izdelek" && (
+                        <div>
+                            <label>
+                                Išči po zalogi ({isLowerThreshold ? "≥" : "≤"} {threshold}):
+                            </label>
+                            <input
+                                type="range"
+                                min="1"
+                                max={maxZaloga}
+                                value={threshold}
+                                onChange={(e) => setThreshold(Number(e.target.value))}
+                            />
+                            <button onClick={() => setIsLowerThreshold(prev => !prev)}>
+                                Nastavi na {isLowerThreshold ? "zgornjo" : "spodnjo"} mejo
+                            </button>
+                            <button onClick={() => adjustThreshold(-1)}>-</button>
+                            <button onClick={() => adjustThreshold(1)}>+</button>
+                        </div>
+                    )}
+                    
+                    {headers.length > 0 && view !== "izdelek-brez-skladisca" && <Form headers={headers} view={view} onAdd={handleAdd} />}
+                    <Table data={filteredData} onEdit={handleEdit} onDelete={handleDelete} endpoint={view} />
+                </div>
+            );
+        }
+
+
+        const root = ReactDOM.createRoot(document.getElementById("root"));
+        root.render(<App />);
+    </script>
+
+</body>
+
+</html>
